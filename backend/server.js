@@ -6,7 +6,7 @@ const app = express();
 
 // Middleware CORS pour autoriser les requêtes depuis Vue.js
 app.use(cors({
-  origin: 'http://localhost:5173', // URL de ton frontend Vue.js
+  origin: 'https://revolut-tau.vercel.app/', // URL de ton frontend Vue.js
   credentials: true
 }));
 
