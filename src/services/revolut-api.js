@@ -1,36 +1,30 @@
+// Service pour l'API Revolut Business
 import axios from 'axios';
 
 class RevolutAPI {
   constructor(apiKey, environment = 'sandbox') {
     this.apiKey = apiKey;
     this.environment = environment;
-    
-    // Utilise notre backend proxy au lieu de l'API directe
-    this.baseURL = 'http://localhost:3001/api';
+    this.baseURL = environment === 'production' 
+      ? 'https://b2b.revolut.com/api/1.0'
+      : 'https://sandbox-b2b.revolut.com/api/1.0';
     
     this.client = axios.create({
       baseURL: this.baseURL,
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json'
-      },
-      timeout: 10000
+      }
     });
   }
 
   // Tester la connexion
   async testConnection() {
     try {
-      const response = await this.client.get('/test');
-      return {
-        success: true,
-        message: response.data.message
-      };
+      const response = await this.client.get('/accounts');
+      return response.status === 200;
     } catch (error) {
-      return {
-        success: false,
-        error: error.response?.data?.error || error.message
-      };
+      throw new Error('Erreur de connexion: ' + error.message);
     }
   }
 
@@ -38,7 +32,6 @@ class RevolutAPI {
   async getAccounts() {
     try {
       const response = await this.client.get('/accounts');
-      
       return response.data.map(account => ({
         id: account.id,
         name: account.name || `Compte ${account.currency}`,
@@ -47,8 +40,8 @@ class RevolutAPI {
         availableBalance: account.available_balance || account.balance
       }));
     } catch (error) {
-      console.error('Erreur récupération comptes:', error.response?.data || error.message);
-      throw new Error(error.response?.data?.error || 'Erreur lors de la récupération des comptes');
+      console.error('Erreur récupération comptes:', error);
+      throw error;
     }
   }
 
@@ -61,18 +54,18 @@ class RevolutAPI {
       
       return response.data.map(transaction => ({
         id: transaction.id,
-        description: transaction.legs?.[0]?.description || 'Transaction',
-        amount: parseFloat(transaction.legs?.[0]?.amount || 0),
-        currency: transaction.legs?.[0]?.currency || 'EUR',
-        date: transaction.created_at?.split('T')[0] || new Date().toISOString().split('T')[0],
+        description: transaction.legs[0]?.description || 'Transaction',
+        amount: parseFloat(transaction.legs[0]?.amount || 0),
+        currency: transaction.legs[0]?.currency || 'EUR',
+        date: transaction.created_at.split('T')[0],
         type: this.getTransactionType(transaction),
         counterparty: this.getCounterpartyName(transaction),
-        reference: transaction.reference || '',
-        status: transaction.state || 'completed'
+        reference: transaction.reference,
+        status: transaction.state
       }));
     } catch (error) {
-      console.error('Erreur récupération transactions:', error.response?.data || error.message);
-      throw new Error(error.response?.data?.error || 'Erreur lors de la récupération des transactions');
+      console.error('Erreur récupération transactions:', error);
+      throw error;
     }
   }
 
@@ -80,23 +73,44 @@ class RevolutAPI {
   async getCounterparties() {
     try {
       const response = await this.client.get('/counterparties');
-      
       return response.data.map(counterparty => ({
         id: counterparty.id,
         name: counterparty.name,
-        account: counterparty.accounts?.[0]?.account_no || '',
+        account: counterparty.accounts[0]?.account_no || '',
         email: counterparty.email || '',
-        currency: counterparty.accounts?.[0]?.currency || 'EUR'
+        currency: counterparty.accounts[0]?.currency || 'EUR'
       }));
     } catch (error) {
-      console.error('Erreur récupération bénéficiaires:', error.response?.data || error.message);
-      throw new Error(error.response?.data?.error || 'Erreur lors de la récupération des bénéficiaires');
+      console.error('Erreur récupération bénéficiaires:', error);
+      throw error;
+    }
+  }
+
+  // Créer un bénéficiaire
+  async createCounterparty(counterpartyData) {
+    try {
+      const response = await this.client.post('/counterparties', counterpartyData);
+      return response.data;
+    } catch (error) {
+      console.error('Erreur création bénéficiaire:', error);
+      throw error;
+    }
+  }
+
+  // Effectuer un paiement
+  async createPayment(paymentData) {
+    try {
+      const response = await this.client.post('/pay', paymentData);
+      return response.data;
+    } catch (error) {
+      console.error('Erreur création paiement:', error);
+      throw error;
     }
   }
 
   // Méthodes utilitaires
   getTransactionType(transaction) {
-    const amount = parseFloat(transaction.legs?.[0]?.amount || 0);
+    const amount = parseFloat(transaction.legs[0]?.amount || 0);
     if (amount > 0) return 'incoming';
     if (amount < 0) return 'outgoing';
     return 'transfer';
