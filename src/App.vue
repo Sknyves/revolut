@@ -2,6 +2,12 @@
   <div id="app">
     <header class="header">
       <h1>🏦 Mon Dashboard Revolut Business</h1>
+      <!-- Dans votre App.vue existant, ajoutez cette ligne où vous voulez -->
+<RevolutConnect 
+  :connected="apiStatus === 'connected'" 
+  @connected="onApiConnected"
+  @disconnected="onApiDisconnected"
+/>
       <div class="header-info">
         <p>Solde total: <strong>{{ formattedTotalBalance }}</strong></p>
         <p>{{ currentDate }}</p>
@@ -692,10 +698,13 @@ import ChartComponent from './components/ChartComponent.vue';
 import RevolutAPI from './services/revolut-api';
 import { exportToCSV, exportToJSON, exportToExcel, generatePDF } from './services/export-utils';
 
+// Importez le composant
+import RevolutConnect from './components/RevolutConnect.vue';
 export default {
   name: 'App',
   components: {
-    ChartComponent
+    ChartComponent,
+    RevolutConnect
   },
   data() {
     return {
@@ -988,6 +997,19 @@ export default {
     }
   },
   methods: {
+    onApiConnected(apiKey) {
+      this.apiConfig.apiKey = apiKey;
+      this.apiStatus = 'connected';
+      this.saveApiConfig();
+      this.loadData();
+    },
+    
+    onApiDisconnected() {
+      this.apiStatus = 'demo';
+      this.apiConfig.apiKey = '';
+      localStorage.removeItem('revolut-api-config');
+      this.loadData();
+    },
     formatBalance(balance, currency) {
       return new Intl.NumberFormat('fr-FR', {
         style: 'currency',
