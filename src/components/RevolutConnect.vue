@@ -1,244 +1,235 @@
 <template>
-  <div class="api-connection-banner" v-if="!connected">
-    <div class="connection-prompt">
-      <h3>🔌 Connectez-vous à Revolut</h3>
-      <p>Pour accéder à vos vraies données, connectez-vous avec votre compte Revolut Business</p>
+  <div class="revolut-connect">
+    <div v-if="!connected" class="connect-section">
+      <h3>🔌 Connexion à Revolut Business</h3>
+      <p>Connectez-vous à votre compte Revolut Business pour accéder à vos données en temps réel.</p>
       
-      <div class="connection-options">
-        <!-- Option API Key -->
-        <div class="connection-option">
-          <h4>🔑 Connexion par API Key</h4>
-          <input 
-            v-model="apiKey" 
-            type="password" 
-            placeholder="Collez votre clé API Revolut Sandbox"
-            class="api-key-input"
-          >
-          <button 
-            @click="testAndSaveApiConfig" 
-            :disabled="!apiKey || loading"
-            class="btn-primary"
-          >
-            {{ loading ? 'Test en cours...' : 'Tester et Sauvegarder' }}
-          </button>
-        </div>
-
-        <!-- Option OAuth -->
-        <div class="connection-option">
-          <h4>🚀 Connexion OAuth</h4>
-          <p>Connexion sécurisée via Revolut</p>
-          <button @click="connectWithOAuth" class="btn-secondary">
-            Se connecter avec Revolut
-          </button>
-        </div>
-      </div>
-
-      <!-- Résultat du test -->
-      <div v-if="connectionResult" class="test-result" :class="connectionResult.type">
-        {{ connectionResult.message }}
+      <button @click="connectWithOAuth" class="btn-connect">
+        🔗 Se connecter avec Revolut
+      </button>
+      
+      <div class="demo-mode">
+        <p>Ou utilisez le <strong>mode démo</strong> pour explorer les fonctionnalités</p>
+        <button @click="useDemoMode" class="btn-demo">
+          🎮 Activer le mode démo
+        </button>
       </div>
     </div>
-  </div>
-
-  <!-- Bannière de statut quand connecté -->
-  <div v-else class="connection-status connected">
-    <div class="status-content">
-      <span class="status-icon">✅</span>
-      <span>Connecté à Revolut Sandbox</span>
-      <button @click="disconnect" class="btn-sm btn-outline">Déconnecter</button>
+    
+    <div v-else class="connected-section">
+      <div class="connection-status">
+        <span class="status-badge connected">✅ Connecté à Revolut</span>
+        <button @click="disconnect" class="btn-disconnect">
+          🔓 Déconnexion
+        </button>
+      </div>
+      
+      <div class="connection-info">
+        <p><strong>Environnement:</strong> {{ environment }}</p>
+        <p><strong>Dernière synchro:</strong> {{ lastSync }}</p>
+      </div>
     </div>
   </div>
 </template>
 
 <script>
-import RevolutAPI from '../services/revolut-api';
-
 export default {
   name: 'RevolutConnect',
   props: {
-    connected: {
-      type: Boolean,
-      default: false
-    }
+    connected: Boolean
   },
   data() {
     return {
-      apiKey: '',
-      loading: false,
-      connectionResult: null
+      environment: 'sandbox',
+      lastSync: 'Jamais'
     };
   },
   methods: {
-    async testAndSaveApiConfig() {
-      if (!this.apiKey) return;
-      
-      this.loading = true;
-      this.connectionResult = null;
-      
+    async connectWithOAuth() {
       try {
-        const result = await RevolutAPI.testConnection(this.apiKey);
+        console.log('🔗 Lancement du flux OAuth Revolut...');
         
-        if (result.success) {
-          this.connectionResult = {
-            type: 'success',
-            message: '✅ Connexion à Revolut réussie!'
-          };
-          
-          // Émettre l'événement vers le parent
-          this.$emit('connected', this.apiKey);
-          
-        } else {
-          this.connectionResult = {
-            type: 'error',
-            message: '❌ ' + (result.error || 'Erreur de connexion')
-          };
-        }
+        // Redirection vers le backend pour l'OAuth
+        window.location.href = 'https://rev-backend-rho.vercel.app/auth/revolut';
+        
       } catch (error) {
-        this.connectionResult = {
-          type: 'error',
-          message: '❌ Erreur: ' + error.message
-        };
-      } finally {
-        this.loading = false;
+        console.error('❌ Erreur connexion OAuth:', error);
+        this.$emit('connection-error', error.message);
       }
     },
-
-    connectWithOAuth() {
-      window.location.href = 'https://rev-backend-rho.vercel.app/auth/revolut';
-    },
-
-    disconnect() {
-      this.apiKey = '';
-      this.connectionResult = null;
+    
+    async useDemoMode() {
+      console.log('🎮 Activation du mode démo');
       this.$emit('disconnected');
+    },
+    
+    async disconnect() {
+      console.log('🔓 Déconnexion de Revolut');
+      this.$emit('disconnected');
+    },
+    
+    // Méthode pour gérer le callback OAuth
+    handleOAuthCallback() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const accessToken = urlParams.get('access_token');
+      const error = urlParams.get('error');
+      
+      if (accessToken) {
+        console.log('✅ Token OAuth reçu:', accessToken);
+        this.$emit('connected', accessToken);
+        
+        // Nettoyer l'URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } else if (error) {
+        console.error('❌ Erreur OAuth:', error);
+        this.$emit('connection-error', error);
+      }
+    }
+  },
+  
+  mounted() {
+    // Vérifier si on revient d'un callback OAuth
+    this.handleOAuthCallback();
+    
+    // Vérifier si on a déjà un token en localStorage
+    const savedConfig = localStorage.getItem('revolut-api-config');
+    if (savedConfig) {
+      const config = JSON.parse(savedConfig);
+      if (config.apiKey) {
+        console.log('🔑 Token trouvé en localStorage');
+        this.$emit('connected', config.apiKey);
+      }
     }
   }
 };
 </script>
 
 <style scoped>
-.api-connection-banner {
+.revolut-connect {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  margin-bottom: 2rem;
+}
+
+.connect-section h3 {
+  margin: 0 0 0.5rem 0;
+  color: #2c3e50;
+}
+
+.connect-section p {
+  margin: 0 0 1rem 0;
+  color: #7f8c8d;
+}
+
+.btn-connect {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
-  padding: 1.5rem;
-  margin: 1rem;
-  border-radius: 12px;
-  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
-}
-
-.connection-prompt h3 {
-  margin: 0 0 0.5rem 0;
-  font-size: 1.25rem;
-}
-
-.connection-prompt p {
-  margin: 0 0 1rem 0;
-  opacity: 0.9;
-}
-
-.connection-options {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 2rem;
-  margin-top: 1rem;
-}
-
-.connection-option {
-  background: rgba(255, 255, 255, 0.1);
-  padding: 1.5rem;
+  border: none;
+  padding: 1rem 2rem;
   border-radius: 8px;
-  backdrop-filter: blur(10px);
-}
-
-.connection-option h4 {
-  margin: 0 0 1rem 0;
   font-size: 1rem;
-}
-
-.api-key-input {
-  width: 100%;
-  padding: 0.75rem;
-  margin: 0.5rem 0;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
-  font-family: monospace;
-}
-
-.api-key-input::placeholder {
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.test-result {
-  padding: 1rem;
-  border-radius: 8px;
-  margin-top: 1rem;
   font-weight: bold;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  margin-right: 1rem;
+}
+
+.btn-connect:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(102, 126, 234, 0.3);
+}
+
+.demo-mode {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #f1f3f4;
+}
+
+.btn-demo {
+  background: #f8f9fa;
+  color: #6c757d;
+  border: 2px solid #dee2e6;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-demo:hover {
+  background: #e9ecef;
+  border-color: #6c757d;
+}
+
+.connected-section {
   text-align: center;
 }
 
-.test-result.success {
-  background: rgba(212, 237, 218, 0.2);
-  border: 1px solid rgba(195, 230, 203, 0.5);
-}
-
-.test-result.error {
-  background: rgba(248, 215, 218, 0.2);
-  border: 1px solid rgba(245, 198, 203, 0.5);
-}
-
 .connection-status {
-  padding: 1rem;
-  margin: 1rem;
-  border-radius: 8px;
-  font-weight: bold;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
 }
 
-.connection-status.connected {
+.status-badge {
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-weight: bold;
+  font-size: 0.9rem;
+}
+
+.status-badge.connected {
   background: #d4edda;
   color: #155724;
-  border: 1px solid #c3e6cb;
 }
 
-.status-content {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  justify-content: center;
-}
-
-.status-icon {
-  font-size: 1.2rem;
-}
-
-.btn-outline {
-  background: transparent;
-  border: 1px solid currentColor;
-  color: inherit;
-  padding: 0.25rem 0.75rem;
-  border-radius: 4px;
+.btn-disconnect {
+  background: #f8f9fa;
+  color: #dc3545;
+  border: 1px solid #dc3545;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
   cursor: pointer;
+  transition: all 0.2s;
 }
 
-.btn-outline:hover {
-  background: rgba(0, 0, 0, 0.1);
+.btn-disconnect:hover {
+  background: #dc3545;
+  color: white;
 }
 
-/* Responsive */
+.connection-info {
+  display: flex;
+  justify-content: center;
+  gap: 2rem;
+  font-size: 0.9rem;
+  color: #6c757d;
+}
+
+.connection-info p {
+  margin: 0;
+}
+
 @media (max-width: 768px) {
-  .connection-options {
-    grid-template-columns: 1fr;
-    gap: 1rem;
+  .connection-status {
+    flex-direction: column;
+    gap: 0.5rem;
   }
   
-  .api-connection-banner {
-    margin: 0.5rem;
-    padding: 1rem;
+  .connection-info {
+    flex-direction: column;
+    gap: 0.5rem;
   }
   
-  .connection-option {
-    padding: 1rem;
+  .btn-connect {
+    margin-right: 0;
+    margin-bottom: 1rem;
+    width: 100%;
   }
 }
 </style>

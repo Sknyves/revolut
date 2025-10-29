@@ -998,18 +998,20 @@ export default {
   },
   methods: {
     onApiConnected(apiKey) {
-      this.apiConfig.apiKey = apiKey;
-      this.apiStatus = 'connected';
-      this.saveApiConfig();
-      this.loadData();
-    },
-    
-    onApiDisconnected() {
-      this.apiStatus = 'demo';
-      this.apiConfig.apiKey = '';
-      localStorage.removeItem('revolut-api-config');
-      this.loadData();
-    },
+    console.log('✅ Connexion API réussie, token:', apiKey);
+    this.apiConfig.apiKey = apiKey;
+    this.apiStatus = 'connected';
+    this.saveApiConfig();
+    this.loadData();
+  },
+  
+  onApiDisconnected() {
+    console.log('🔓 Déconnexion API');
+    this.apiStatus = 'demo';
+    this.apiConfig.apiKey = '';
+    localStorage.removeItem('revolut-api-config');
+    this.loadData();
+  },
     formatBalance(balance, currency) {
       return new Intl.NumberFormat('fr-FR', {
         style: 'currency',
@@ -1132,53 +1134,58 @@ export default {
     },
     
     async testConnection() {
-      if (!this.apiConfig.apiKey) return;
+    if (!this.apiConfig.apiKey) {
+      this.connectionTestResult = {
+        type: 'error',
+        message: '❌ Aucune clé API configurée'
+      };
+      return;
+    }
+    
+    this.loading = true;
+    this.loadingMessage = 'Test de connexion au backend...';
+    
+    try {
+      const revolutAPI = new RevolutAPI(this.apiConfig.apiKey);
+      const result = await revolutAPI.testConnection();
       
-      this.loading = true;
-      this.loadingMessage = 'Test de connexion à Revolut...';
-      
-      try {
-        // Simulation de test de connexion
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        // En réalité, on ferait: await RevolutAPI.testConnection(this.apiConfig.apiKey);
-        const success = this.apiConfig.apiKey.length > 10; // Simulation
-        
-        if (success) {
-          this.connectionTestResult = {
-            type: 'success',
-            message: '✅ Connexion à Revolut réussie!'
-          };
-        } else {
-          this.connectionTestResult = {
-            type: 'error',
-            message: '❌ Clé API invalide'
-          };
-        }
-      } catch (error) {
+      if (result.success) {
+        this.connectionTestResult = {
+          type: 'success',
+          message: '✅ Connexion au backend réussie!'
+        };
+        this.apiStatus = 'connected';
+      } else {
         this.connectionTestResult = {
           type: 'error',
-          message: '❌ Erreur de connexion: ' + error.message
+          message: `❌ ${result.error}`
         };
-      } finally {
-        this.loading = false;
+        this.apiStatus = 'error';
       }
-    },
+    } catch (error) {
+      this.connectionTestResult = {
+        type: 'error',
+        message: '❌ Erreur de connexion au backend'
+      };
+      this.apiStatus = 'error';
+    } finally {
+      this.loading = false;
+    }
+  },
+  
+  async saveApiConfig() {
+    if (!this.apiConfig.apiKey) return;
     
-    async saveApiConfig() {
-      if (!this.apiConfig.apiKey) return;
-      
-      this.apiStatus = 'connected';
-      this.connectionTestResult = null;
-      
-      // Sauvegarder en localStorage
-      localStorage.setItem('revolut-api-config', JSON.stringify(this.apiConfig));
-      
-      // Recharger les données avec l'API
-      await this.loadData();
-      
+    // Sauvegarder en localStorage
+    localStorage.setItem('revolut-api-config', JSON.stringify(this.apiConfig));
+    
+    // Tester la connexion
+    await this.testConnection();
+    
+    if (this.apiStatus === 'connected') {
       alert('Configuration sauvegardée! Données synchronisées avec Revolut.');
-    },
+    }
+  },
     
     disconnectApi() {
       this.apiStatus = 'demo';
