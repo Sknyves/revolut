@@ -6,7 +6,7 @@ class RevolutAPI {
     this.environment = environment;
     
     // Utilise notre backend proxy au lieu de l'API directe
-    this.baseURL = 'http://localhost:3001/api';
+    this.baseURL = 'https://rev-backend-rho.vercel.app/api';
     
     this.client = axios.create({
       baseURL: this.baseURL,

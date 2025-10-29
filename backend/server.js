@@ -6,7 +6,7 @@ const app = express();
 
 // Middleware CORS pour autoriser les requêtes depuis Vue.js
 app.use(cors({
-  origin: 'https://revolut-tau.vercel.app/', // URL de ton frontend Vue.js
+  origin: 'https://revolut-tau.vercel.app', // URL de ton frontend Vue.js
   credentials: true
 }));
 
@@ -152,6 +152,92 @@ app.get('/api/test', async (req, res) => {
         details: error.response?.data || error.message 
       });
     }
+  }
+});
+
+// server.js - Ajoutez ces routes OAuth
+
+const REVOLUT_CONFIG = {
+  clientId: process.env.REVOLUT_CLIENT_ID,
+  clientSecret: process.env.REVOLUT_CLIENT_SECRET,
+  redirectUri: 'https://rev-backend-rho.vercel.app/auth/callback',
+  sandbox: true
+};
+
+// Route pour initier le flux OAuth
+app.get('/auth/revolut', (req, res) => {
+  const authUrl = `https://sandbox-business.revolut.com/app-confirm?` +
+    `client_id=${REVOLUT_CONFIG.clientId}` +
+    `&redirect_uri=${encodeURIComponent(REVOLUT_CONFIG.redirectUri)}` +
+    `&response_type=code`;
+  
+  res.redirect(authUrl);
+});
+
+// Callback OAuth
+app.get('/auth/callback', async (req, res) => {
+  try {
+    const { code } = req.query;
+    
+    if (!code) {
+      return res.status(400).json({ error: 'Code authorization manquant' });
+    }
+
+    // Échanger le code contre un token d'accès
+    const tokenResponse = await axios.post(
+      'https://sandbox-b2b.revolut.com/api/1.0/auth/token',
+      new URLSearchParams({
+        grant_type: 'authorization_code',
+        client_id: REVOLUT_CONFIG.clientId,
+        client_secret: REVOLUT_CONFIG.clientSecret,
+        code: code,
+        redirect_uri: REVOLUT_CONFIG.redirectUri
+      }),
+      {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }
+      }
+    );
+
+    const { access_token, refresh_token, expires_in } = tokenResponse.data;
+    
+    // Rediriger vers le frontend avec le token
+    res.redirect(`http://localhost:5173/auth/success?access_token=${access_token}`);
+    
+  } catch (error) {
+    console.error('OAuth Error:', error.response?.data || error.message);
+    res.redirect(`http://localhost:5173/auth/error?message=${encodeURIComponent(error.response?.data?.message || 'Erreur authentication')}`);
+  }
+});
+
+// Route pour rafraîchir le token
+app.post('/auth/refresh', async (req, res) => {
+  try {
+    const { refresh_token } = req.body;
+    
+    const tokenResponse = await axios.post(
+      'https://sandbox-b2b.revolut.com/api/1.0/auth/token',
+      new URLSearchParams({
+        grant_type: 'refresh_token',
+        client_id: REVOLUT_CONFIG.clientId,
+        client_secret: REVOLUT_CONFIG.clientSecret,
+        refresh_token: refresh_token
+      }),
+      {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }
+      }
+    );
+
+    res.json(tokenResponse.data);
+  } catch (error) {
+    console.error('Refresh Token Error:', error.response?.data || error.message);
+    res.status(400).json({ 
+      error: 'Erreur lors du rafraîchissement du token',
+      details: error.response?.data 
+    });
   }
 });
 
